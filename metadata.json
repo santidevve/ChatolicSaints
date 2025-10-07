@@ -1,0 +1,7 @@
+{
+  "name": "Saints Investigator",
+  "description": "An application to explore the lives of Catholic Saints using AI. Discover biographies, key facts, and investigate sacred art with image analysis capabilities.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
