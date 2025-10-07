@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import useVoiceRecognition from '../hooks/useVoiceRecognition';
 import { translations } from '../lib/translations';
 import type { Language } from '../App';
+import { getSaintSuggestions } from '../services/geminiService';
 
 interface SearchScreenProps {
   onSelectSaint: (name: string) => void;
@@ -23,20 +24,65 @@ const MicrophoneIcon = ({ isListening }: { isListening: boolean }) => (
 
 const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectSaint, language }) => {
   const [query, setQuery] = useState('');
-  const { isListening, transcript, startListening, error: voiceError } = useVoiceRecognition({ language });
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  const { isListening, transcript, startListening, error: voiceError, permissionStatus } = useVoiceRecognition({ language });
   const t = translations[language];
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (transcript) {
       setQuery(transcript);
     }
   }, [transcript]);
+  
+  // Debounced effect for fetching suggestions
+  useEffect(() => {
+    if (query.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    const debounceTimer = setTimeout(() => {
+      const fetchSuggestions = async () => {
+        setIsSuggestionsLoading(true);
+        const result = await getSaintSuggestions(query, language);
+        // Only update if the query hasn't changed since the request was made
+        setSuggestions(result);
+        setIsSuggestionsLoading(false);
+      };
+      fetchSuggestions();
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(debounceTimer);
+  }, [query, language]);
+  
+  // Effect for closing suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setSuggestions([]);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim()) {
+      setSuggestions([]);
       onSelectSaint(query.trim());
     }
+  };
+
+  const handleSuggestionClick = (name: string) => {
+    setQuery(name);
+    setSuggestions([]);
+    onSelectSaint(name);
   };
 
   const featuredSaints = [
@@ -47,6 +93,8 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectSaint, language }) 
     'Thomas Aquinas',
     'Maximilian Kolbe'
   ];
+  
+  const isMicDisabled = isListening || permissionStatus === 'denied';
 
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center text-center p-4">
@@ -56,35 +104,55 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectSaint, language }) 
         <p className="mt-4 mb-8 text-lg md:text-xl text-stone-700 max-w-2xl mx-auto">
           {t.subtitle}
         </p>
+        
+        <div ref={searchContainerRef} className="relative w-full max-w-lg mx-auto">
+          <form onSubmit={handleSearch}>
+            <div className="relative group">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={isListening ? t.listening : t.searchPlaceholder}
+                className="w-full pl-6 pr-32 py-4 text-lg text-stone-800 bg-white/90 backdrop-blur-sm border-2 border-stone-300 rounded-full shadow-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition duration-300"
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                onClick={() => startListening()}
+                disabled={isMicDisabled}
+                className="absolute inset-y-0 right-[68px] flex items-center justify-center w-14 h-full text-stone-500 transition disabled:cursor-not-allowed disabled:opacity-50 group"
+                aria-label={t.voiceSearch}
+                title={permissionStatus === 'denied' ? t.micPermissionDenied : t.voiceSearch}
+              >
+                <MicrophoneIcon isListening={isListening} />
+              </button>
+              <button
+                type="submit"
+                className="absolute inset-y-0 right-0 flex items-center justify-center w-16 h-full text-white bg-amber-600 rounded-r-full hover:bg-amber-700 transition-colors duration-300 shadow-md group-hover:shadow-lg"
+                aria-label={t.search}
+              >
+                <SearchIcon />
+              </button>
+            </div>
+          </form>
 
-        <form onSubmit={handleSearch} className="w-full max-w-lg mx-auto">
-          <div className="relative group">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={isListening ? t.listening : t.searchPlaceholder}
-              className="w-full pl-6 pr-32 py-4 text-lg text-stone-800 bg-white/90 backdrop-blur-sm border-2 border-stone-300 rounded-full shadow-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition duration-300"
-            />
-            <button
-              type="button"
-              onClick={() => startListening()}
-              disabled={isListening}
-              className="absolute inset-y-0 right-[68px] flex items-center justify-center w-14 h-full text-stone-500 transition disabled:cursor-not-allowed group"
-              aria-label={t.voiceSearch}
-            >
-              <MicrophoneIcon isListening={isListening} />
-            </button>
-            <button
-              type="submit"
-              className="absolute inset-y-0 right-0 flex items-center justify-center w-16 h-full text-white bg-amber-600 rounded-r-full hover:bg-amber-700 transition-colors duration-300 shadow-md group-hover:shadow-lg"
-              aria-label={t.search}
-            >
-              <SearchIcon />
-            </button>
-          </div>
+          {(isSuggestionsLoading || suggestions.length > 0) && (
+            <ul className="absolute z-20 w-full mt-2 bg-white border border-stone-200 rounded-xl shadow-lg overflow-hidden text-left">
+              {isSuggestionsLoading && <li className="px-5 py-3 text-stone-500">{t.loadingSuggestions}</li>}
+              {!isSuggestionsLoading && suggestions.map((suggestion, index) => (
+                <li
+                  key={index}
+                  className="px-5 py-3 cursor-pointer hover:bg-amber-100 transition duration-150"
+                  onMouseDown={() => handleSuggestionClick(suggestion)}
+                >
+                  {suggestion}
+                </li>
+              ))}
+            </ul>
+          )}
+
           {voiceError && <p className="text-red-500 text-sm mt-2">{voiceError}</p>}
-        </form>
+        </div>
 
         <div className="mt-12">
             <h3 className="text-xl font-semibold text-stone-600 mb-4">{t.featuredSaints}</h3>

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { SaintInfo, BibleVerse, SaintValidation, EucharisticMiracle, MiracleSource } from '../types';
 
@@ -26,6 +25,12 @@ const saintValidationSchema = {
   required: ["isSaint", "reasoning"],
 };
 
+const saintSuggestionsSchema = {
+    type: Type.ARRAY,
+    items: { type: Type.STRING },
+    description: "A list of up to 5 potential saint names that match the user's partial query."
+};
+
 const bibleSearchSchema = {
     type: Type.ARRAY,
     items: {
@@ -41,6 +46,30 @@ const bibleSearchSchema = {
 const getLanguageInstruction = (language: string) => {
     return language === 'es' ? 'All responses must be in Spanish.' : 'All responses must be in English.';
 };
+
+export const getSaintSuggestions = async (query: string, language: string): Promise<string[]> => {
+    if (query.length < 3) {
+        return [];
+    }
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Based on the partial query "${query}", provide a list of up to 5 likely Catholic Saint names.`,
+            config: {
+                systemInstruction: `You are a search suggestion engine for a Catholic Saints app. Provide a JSON array of saint names that are a close match to the user's query. Prioritize well-known saints. If the query is ambiguous, provide a few options. Return an empty array if no likely matches are found. ${getLanguageInstruction(language)}`,
+                responseMimeType: "application/json",
+                responseSchema: saintSuggestionsSchema,
+                thinkingConfig: { thinkingBudget: 0 } // Optimize for low latency
+            },
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as string[];
+    } catch (error) {
+        console.error("Error fetching saint suggestions:", error);
+        return []; // Return empty array on error to not break UI
+    }
+};
+
 
 export const getSaintInfo = async (saintName: string, language: string): Promise<SaintInfo> => {
   try {
@@ -150,20 +179,69 @@ export const searchBible = async (query: string, language: string): Promise<Bibl
     }
 };
 
-export const getEucharisticMiracleInfo = async (query: string, language: string): Promise<EucharisticMiracle> => {
+export const translateText = async (text: string, targetLanguage: 'en' | 'es'): Promise<string> => {
+    const languageName = targetLanguage === 'es' ? 'Spanish' : 'English';
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Provide a detailed summary of the Eucharistic miracle of "${query}". Prioritize information from reliable Catholic sources.`,
+            contents: `Translate the following text to ${languageName}:\n\n---\n\n${text}`,
             config: {
-                systemInstruction: `You are a Catholic historian specializing in Eucharistic miracles. Your response should be a clear, factual summary. Use the grounding search results to formulate your answer. ${getLanguageInstruction(language)}`,
-                tools: [{ googleSearch: {} }],
+                systemInstruction: `You are a highly skilled, professional translator. Your sole purpose is to provide a faithful and natural-sounding translation of the given text into the target language. Do not add any commentary, notes, or introductory phrases. Only output the translated text.`,
+            }
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error translating text:", error);
+        throw new Error("Failed to translate the text.");
+    }
+};
+
+export const generateMiracleImage = async (miracleName: string, language: string): Promise<string> => {
+    try {
+        const prompt = language === 'es'
+            ? `Una representación artística y reverente del milagro Eucarístico de ${miracleName}. Estilo de arte sacro, con un enfoque en el misterio y la santidad del evento.`
+            : `A reverent, artistic depiction of the Eucharistic miracle of ${miracleName}. Sacred art style, focusing on the mystery and holiness of the event.`;
+
+        const response = await ai.models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt: prompt,
+            config: {
+                numberOfImages: 1,
+                outputMimeType: 'image/jpeg',
+                aspectRatio: '16:9',
             },
         });
 
-        const summary = response.text.trim();
+        if (response.generatedImages && response.generatedImages.length > 0) {
+            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+            return `data:image/jpeg;base64,${base64ImageBytes}`;
+        } else {
+            // Return empty string on failure, allowing text to still be shown
+            return "";
+        }
+    } catch (error) {
+        console.error("Error generating miracle image:", error);
+        // Fail gracefully
+        return "";
+    }
+};
+
+export const getEucharisticMiracleInfo = async (query: string, language: string): Promise<EucharisticMiracle> => {
+    try {
+        const [textResponse, imageUrl] = await Promise.all([
+            ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: `Provide a detailed summary of the Eucharistic miracle of "${query}". Prioritize information from reliable Catholic sources.`,
+                config: {
+                    systemInstruction: `You are a Catholic historian specializing in Eucharistic miracles. Your response should be a clear, factual summary. Use the grounding search results to formulate your answer. ${getLanguageInstruction(language)}`,
+                    tools: [{ googleSearch: {} }],
+                },
+            }),
+            generateMiracleImage(query, language)
+        ]);
         
-        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const summary = textResponse.text.trim();
+        const groundingChunks = textResponse.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
         const sources: MiracleSource[] = groundingChunks
             .map((chunk: any) => chunk.web)
             .filter((web: any) => web && web.uri && web.title)
@@ -173,7 +251,7 @@ export const getEucharisticMiracleInfo = async (query: string, language: string)
             throw new Error("Could not retrieve information for this miracle. It may not be a recognized Eucharistic miracle.");
         }
 
-        return { summary, sources };
+        return { summary, sources, imageUrl };
 
     } catch (error) {
         console.error("Error fetching Eucharistic miracle info:", error);
@@ -181,5 +259,48 @@ export const getEucharisticMiracleInfo = async (query: string, language: string)
             throw error;
         }
         throw new Error("An unexpected error occurred while researching the miracle.");
+    }
+};
+
+export const askAboutScripture = async (context: string, question: string, language: string): Promise<string> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Based on the following scripture: "${context}", please answer this question: "${question}"`,
+            config: {
+                systemInstruction: `You are a knowledgeable and respectful Catholic theologian. Provide a clear, insightful, and concise answer to the user's question based *only* on the provided scripture context and your theological knowledge. Do not reference external non-scriptural sources unless absolutely necessary. Keep the tone helpful and reverent. ${getLanguageInstruction(language)}`,
+            }
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error asking about scripture:", error);
+        throw new Error("Failed to get an answer from the AI. Please try again.");
+    }
+};
+
+export const generateBibleChapterImage = async (book: string, chapter: string, language: string): Promise<string> => {
+    try {
+        const prompt = language === 'es'
+            ? `Una representación artística y reverente de los temas principales de ${book}, Capítulo ${chapter}. Estilo de arte sacro, como una pintura clásica, enfocándose en la narrativa o el mensaje central del capítulo.`
+            : `A reverent, artistic depiction of the main themes from ${book}, Chapter ${chapter}. Sacred art style, like a classical painting, focusing on the chapter's central narrative or message.`;
+
+        const response = await ai.models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt: prompt,
+            config: {
+                numberOfImages: 1,
+                outputMimeType: 'image/jpeg',
+                aspectRatio: '16:9',
+            },
+        });
+
+        if (response.generatedImages && response.generatedImages.length > 0) {
+            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+            return `data:image/jpeg;base64,${base64ImageBytes}`;
+        }
+        return ""; // Return empty string on failure
+    } catch (error) {
+        console.error("Error generating Bible chapter image:", error);
+        return ""; // Fail gracefully
     }
 };

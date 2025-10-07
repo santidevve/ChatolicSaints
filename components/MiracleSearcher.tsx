@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { getEucharisticMiracleInfo } from '../services/geminiService';
+import { getEucharisticMiracleInfo, translateText } from '../services/geminiService';
 import type { EucharisticMiracle } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { translations } from '../lib/translations';
@@ -20,6 +20,9 @@ const MiracleSearcher: React.FC<MiracleSearcherProps> = ({ language }) => {
     const [miracleInfo, setMiracleInfo] = useState<EucharisticMiracle | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
+    const [isTranslating, setIsTranslating] = useState(false);
+    const [isShowingTranslation, setIsShowingTranslation] = useState(false);
     const t = translations[language];
 
     const performSearch = useCallback(async (searchTerm: string) => {
@@ -29,6 +32,9 @@ const MiracleSearcher: React.FC<MiracleSearcherProps> = ({ language }) => {
         setIsLoading(true);
         setError(null);
         setMiracleInfo(null);
+        setTranslatedSummary(null);
+        setIsShowingTranslation(false);
+
         try {
             const result = await getEucharisticMiracleInfo(searchTerm.trim(), language);
             setMiracleInfo(result);
@@ -42,6 +48,33 @@ const MiracleSearcher: React.FC<MiracleSearcherProps> = ({ language }) => {
     const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         performSearch(query);
+    };
+
+    const handleTranslate = async () => {
+        if (!miracleInfo?.summary) return;
+
+        if (isShowingTranslation) {
+            setIsShowingTranslation(false);
+            return;
+        }
+
+        if (translatedSummary) {
+            setIsShowingTranslation(true);
+            return;
+        }
+
+        setIsTranslating(true);
+        setError(null);
+        try {
+            const targetLanguage = language === 'en' ? 'es' : 'en';
+            const translation = await translateText(miracleInfo.summary, targetLanguage);
+            setTranslatedSummary(translation);
+            setIsShowingTranslation(true);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Translation failed.');
+        } finally {
+            setIsTranslating(false);
+        }
     };
     
     const featuredMiracles = t.featuredMiracles;
@@ -95,11 +128,36 @@ const MiracleSearcher: React.FC<MiracleSearcherProps> = ({ language }) => {
 
             {miracleInfo && (
                 <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-8 animate-fade-in">
+                    {miracleInfo.imageUrl && (
+                        <div className="w-full h-64 md:h-80 bg-stone-200">
+                            <img 
+                                src={miracleInfo.imageUrl} 
+                                alt={`Artistic depiction of the miracle of ${query}`}
+                                className="w-full h-full object-cover animate-fade-in"
+                            />
+                        </div>
+                    )}
                     <div className="p-6 md:p-8">
                         <div className="mb-8">
-                            <h2 className="text-3xl font-bold text-amber-800 mb-4 border-b-2 border-amber-100 pb-2">{t.miracleSummary}</h2>
+                            <div className="flex justify-between items-center border-b-2 border-amber-100 pb-2 mb-4">
+                                <h2 className="text-3xl font-bold text-amber-800">{t.miracleSummary}</h2>
+                                {miracleInfo.summary && (
+                                    <button
+                                        onClick={handleTranslate}
+                                        disabled={isTranslating}
+                                        className="px-4 py-1.5 text-sm bg-stone-200 text-stone-700 rounded-full hover:bg-amber-200 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        {isTranslating 
+                                            ? (<span className="flex items-center">{t.translating}<div className="w-4 h-4 ml-2 border-2 border-stone-500 border-t-transparent rounded-full animate-spin"></div></span>)
+                                            : isShowingTranslation 
+                                                ? t.showOriginal 
+                                                : t.translateAction
+                                        }
+                                    </button>
+                                )}
+                            </div>
                             <div className="prose max-w-none text-stone-700 leading-relaxed whitespace-pre-wrap">
-                                {miracleInfo.summary}
+                                {isShowingTranslation && translatedSummary ? translatedSummary : miracleInfo.summary}
                             </div>
                         </div>
 

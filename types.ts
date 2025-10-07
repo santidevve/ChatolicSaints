@@ -14,6 +14,13 @@ export interface BibleVerse {
   text: string;
 }
 
+export interface BookmarkedVerse {
+  reference: string;
+  text: string;
+  book: string;
+  chapter: string;
+}
+
 export interface SaintValidation {
   isSaint: boolean;
   reasoning: string;
@@ -27,4 +34,5 @@ export interface MiracleSource {
 export interface EucharisticMiracle {
   summary: string;
   sources: MiracleSource[];
+  imageUrl?: string;
 }
