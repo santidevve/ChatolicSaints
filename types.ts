@@ -14,6 +14,11 @@ export interface BibleVerse {
   text: string;
 }
 
+export interface ChapterVerse {
+  verse: string;
+  text: string;
+}
+
 export interface BookmarkedVerse {
   reference: string;
   text: string;
@@ -35,4 +40,14 @@ export interface EucharisticMiracle {
   summary: string;
   sources: MiracleSource[];
   imageUrl?: string;
+}
+
+export interface Chant {
+  number: string;
+  title: string;
+}
+
+export interface ChantDetails {
+  title: string;
+  lyrics: string;
 }

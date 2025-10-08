@@ -4,9 +4,10 @@ import SearchScreen from './components/SearchScreen';
 import SaintDetailScreen from './components/SaintDetailScreen';
 import BibleReader from './components/BibleReader';
 import MiracleSearcher from './components/MiracleSearcher';
+import ChantBook from './components/ChantBook';
 import { translations } from './lib/translations';
 
-type View = 'saints' | 'bible' | 'miracles';
+type View = 'saints' | 'bible' | 'miracles' | 'chants';
 export type Language = 'en' | 'es';
 
 const App: React.FC = () => {
@@ -47,6 +48,12 @@ const App: React.FC = () => {
               >
                 {t.miracles}
               </button>
+              <button 
+                onClick={() => setView('chants')}
+                className={`px-4 py-2 rounded-md text-lg font-semibold transition ${view === 'chants' ? 'bg-amber-600 text-white' : 'text-stone-600 hover:bg-amber-100'}`}
+              >
+                {t.chants}
+              </button>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -82,6 +89,7 @@ const App: React.FC = () => {
         )}
         {view === 'bible' && <BibleReader language={language} />}
         {view === 'miracles' && <MiracleSearcher language={language} />}
+        {view === 'chants' && <ChantBook language={language} />}
       </main>
       <footer className="text-center p-4 text-stone-500 text-sm">
         <p>{t.footer}</p>

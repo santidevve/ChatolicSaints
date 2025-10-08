@@ -1,6 +1,7 @@
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { getScripture, searchBible, generateBibleChapterImage } from '../services/geminiService';
-import type { BibleVerse, BookmarkedVerse } from '../types';
+import type { BibleVerse, BookmarkedVerse, ChapterVerse } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { translations } from '../lib/translations';
 import { bibleBooks } from '../lib/bibleData';
@@ -26,7 +27,7 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
   // Read state
   const [selectedBook, setSelectedBook] = useState('Genesis');
   const [selectedChapter, setSelectedChapter] = useState('1');
-  const [chapterText, setChapterText] = useState('');
+  const [verses, setVerses] = useState<ChapterVerse[]>([]);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,12 +68,20 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
     return bookmarks.some(b => b.reference === reference);
   };
   
-  const toggleBookmark = (verse: BookmarkedVerse) => {
+  const toggleBookmark = (verse: ChapterVerse) => {
+    const reference = `${selectedBook} ${selectedChapter}:${verse.verse}`;
+    const fullText = `${verse.verse} ${verse.text}`;
     let updatedBookmarks;
-    if (isBookmarked(verse.reference)) {
-        updatedBookmarks = bookmarks.filter(b => b.reference !== verse.reference);
+    if (isBookmarked(reference)) {
+        updatedBookmarks = bookmarks.filter(b => b.reference !== reference);
     } else {
-        updatedBookmarks = [...bookmarks, verse];
+        const newBookmark: BookmarkedVerse = {
+            book: selectedBook,
+            chapter: selectedChapter,
+            reference: reference,
+            text: fullText
+        };
+        updatedBookmarks = [...bookmarks, newBookmark];
     }
     setBookmarks(updatedBookmarks);
     localStorage.setItem('saints-app-bookmarks', JSON.stringify(updatedBookmarks));
@@ -107,10 +116,7 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
             setIsPaused(true);
         }
     } else {
-        const textToSpeak = chapterText
-            .split('\n')
-            .map(line => line.replace(/^\d+\s+/, '')) // Remove verse numbers for smoother reading
-            .join(' ');
+        const textToSpeak = verses.map(v => v.text).join(' ');
             
         const utterance = new SpeechSynthesisUtterance(textToSpeak);
         utterance.lang = language === 'es' ? 'es-ES' : 'en-US';
@@ -123,7 +129,7 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
         window.speechSynthesis.speak(utterance);
         setIsSpeaking(true);
     }
-  }, [isSpeaking, isPaused, chapterText, language]);
+  }, [isSpeaking, isPaused, verses, language]);
 
 
   // --- Data Fetching Logic ---
@@ -131,14 +137,14 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
     if (!selectedBook || !selectedChapter) return;
     setIsLoading(true);
     setError(null);
-    setChapterText('');
+    setVerses([]);
     setChapterImageUrl(null);
     setIsImageLoading(true);
     handleStopSpeech();
 
     try {
-      const text = await getScripture(selectedBook, selectedChapter, language);
-      setChapterText(text);
+      const verseData = await getScripture(selectedBook, selectedChapter, language);
+      setVerses(verseData);
 
       generateBibleChapterImage(selectedBook, selectedChapter, language).then(imageUrl => {
           if (imageUrl) setChapterImageUrl(imageUrl);
@@ -204,7 +210,7 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
   useEffect(() => {
       setSelectedText('');
       setContextMenuPos(null);
-  }, [chapterText]);
+  }, [verses]);
 
 
   const currentBookChapters = bibleBooks[selectedBook] || 1;
@@ -243,7 +249,7 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
             {isLoading && <LoadingSpinner message={t.loadingScripture} />}
             {error && <p className="text-red-600 bg-red-100 p-3 rounded-md">{error}</p>}
             
-            {chapterText && (
+            {verses.length > 0 && (
                 <div className="mt-6 bg-stone-50 p-6 rounded-lg relative" ref={chapterTextRef} onMouseUp={handleMouseUp} onMouseDown={e => e.stopPropagation()}>
                     {contextMenuPos && selectedText && (<BibleContextMenu top={contextMenuPos.top} left={contextMenuPos.left} onAsk={() => setIsModalOpen(true)} text={t.askGemini}/>)}
                     <div className="flex justify-between items-center mb-4">
@@ -254,22 +260,18 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
                         </div>
                     </div>
                     <div className="prose max-w-none text-stone-700 leading-relaxed space-y-2">
-                        {chapterText.split('\n').filter(v => v.trim()).map(verseLine => {
-                            const match = verseLine.match(/^(\d+)\s+(.*)/);
-                            if (!match) return <p key={verseLine}>{verseLine}</p>;
-                            const verseNum = match[1];
-                            const text = match[2];
-                            const reference = `${selectedBook} ${selectedChapter}:${verseNum}`;
+                        {verses.map((verse, index) => {
+                            const reference = `${selectedBook} ${selectedChapter}:${verse.verse}`;
                             const isVerseBookmarked = isBookmarked(reference);
 
                             return (
-                                <div key={reference} className="flex items-start gap-2 py-1">
-                                    <button onClick={() => toggleBookmark({ book: selectedBook, chapter: selectedChapter, reference, text: verseLine })} className="text-stone-400 hover:text-amber-600 transition-colors mt-1" aria-label={isVerseBookmarked ? t.removeBookmark : t.addBookmark}>
+                                <div key={index} className="flex items-start gap-2 py-1">
+                                    <button onClick={() => toggleBookmark(verse)} className="text-stone-400 hover:text-amber-600 transition-colors mt-1" aria-label={isVerseBookmarked ? t.removeBookmark : t.addBookmark}>
                                         {isVerseBookmarked ? <BookmarkFilledIcon /> : <BookmarkOutlineIcon />}
                                     </button>
                                     <p>
-                                        <strong className="text-stone-500 w-6 inline-block mr-1">{verseNum}</strong>
-                                        {text}
+                                        <strong className="text-stone-500 w-6 inline-block mr-1">{verse.verse}</strong>
+                                        {verse.text}
                                     </p>
                                 </div>
                             );
@@ -318,7 +320,11 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
                             <div key={bookmark.reference} className="bg-stone-50 p-4 rounded-lg border-l-4 border-amber-500">
                                 <div className="flex justify-between items-center">
                                     <p className="font-bold text-stone-800">{t.bibleBooks[bookmark.book]} {bookmark.chapter}:{bookmark.reference.split(':')[1]}</p>
-                                    <button onClick={() => toggleBookmark(bookmark)} aria-label={t.removeBookmark}><TrashIcon /></button>
+                                    <button onClick={() => {
+                                        const updatedBookmarks = bookmarks.filter(b => b.reference !== bookmark.reference);
+                                        setBookmarks(updatedBookmarks);
+                                        localStorage.setItem('saints-app-bookmarks', JSON.stringify(updatedBookmarks));
+                                    }} aria-label={t.removeBookmark}><TrashIcon /></button>
                                 </div>
                                 <p className="text-stone-700 mt-2">"{bookmark.text.replace(/^\d+\s/, '')}"</p>
                             </div>

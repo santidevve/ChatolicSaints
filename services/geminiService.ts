@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import type { SaintInfo, BibleVerse, SaintValidation, EucharisticMiracle, MiracleSource } from '../types';
+import type { SaintInfo, BibleVerse, SaintValidation, EucharisticMiracle, MiracleSource, ChapterVerse, Chant } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
@@ -40,6 +41,30 @@ const bibleSearchSchema = {
             text: { type: Type.STRING, description: 'The full text of the verse.' }
         },
         required: ["reference", "text"]
+    }
+};
+
+const bibleChapterSchema = {
+    type: Type.ARRAY,
+    items: {
+        type: Type.OBJECT,
+        properties: {
+            verse: { type: Type.STRING, description: 'The verse number (e.g., "1", "2-3").' },
+            text: { type: Type.STRING, description: 'The full text of the verse.' }
+        },
+        required: ["verse", "text"]
+    }
+};
+
+const chantListSchema = {
+    type: Type.ARRAY,
+    items: {
+        type: Type.OBJECT,
+        properties: {
+            number: { type: Type.STRING, description: 'The song number (e.g., "A1").' },
+            title: { type: Type.STRING, description: 'The title of the song.' }
+        },
+        required: ["number", "title"]
     }
 };
 
@@ -144,16 +169,19 @@ export const generateSaintImage = async (saintName: string, language: string): P
   }
 };
 
-export const getScripture = async (book: string, chapter: string, language: string): Promise<string> => {
+export const getScripture = async (book: string, chapter: string, language: string): Promise<ChapterVerse[]> => {
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `Provide the full text for the book of ${book}, chapter ${chapter}.`,
             config: {
-                systemInstruction: `You are a scripture reference tool. Use the New American Bible, Revised Edition (NABRE) for English requests, and the Biblia de Jerusalén Latinoamericana for Spanish requests. Format the output as a single string, with each verse prefixed by its number on a new line. Example: '1 In the beginning...\\n2 And the earth was...'. Do not include any other commentary or introductory text. ${getLanguageInstruction(language)}`,
+                systemInstruction: `You are a scripture reference tool. Use the New American Bible, Revised Edition (NABRE) for English requests, and the Biblia de Jerusalén Latinoamericana for Spanish requests. Return the result as a JSON array of objects, where each object has a "verse" string and a "text" string. Do not include any other commentary or introductory text. ${getLanguageInstruction(language)}`,
+                responseMimeType: "application/json",
+                responseSchema: bibleChapterSchema,
             }
         });
-        return response.text.trim();
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as ChapterVerse[];
     } catch (error) {
         console.error("Error fetching scripture:", error);
         throw new Error("Failed to retrieve the specified scripture. Please check the book and chapter.");
@@ -302,5 +330,40 @@ export const generateBibleChapterImage = async (book: string, chapter: string, l
     } catch (error) {
         console.error("Error generating Bible chapter image:", error);
         return ""; // Fail gracefully
+    }
+};
+
+export const getChantList = async (language: string): Promise<Chant[]> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: "Extract the list of all chants from the page 'https://neocatechumenaleiter.org/cantoral-resucito/'. Return a JSON array of objects, where each object has 'number' and 'title'.",
+            config: {
+                systemInstruction: `You are a web data extractor. Your task is to parse the provided URL and return a structured list of songs. The title should be cleaned of any extra numbering. ${getLanguageInstruction(language)}`,
+                responseMimeType: "application/json",
+                responseSchema: chantListSchema,
+            }
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as Chant[];
+    } catch (error) {
+        console.error("Error fetching chant list:", error);
+        throw new Error("Failed to retrieve the list of chants.");
+    }
+};
+
+export const getChantLyrics = async (chantTitle: string, language: string): Promise<string> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Provide the lyrics for the chant "${chantTitle}". You can use the songbook at 'https://neocatechumenaleiter.org/cantoral-resucito/' as a primary reference.`,
+            config: {
+                systemInstruction: `You are a helpful assistant providing song lyrics. Format the lyrics clearly with line breaks. Do not include chords or any other annotations, just the text of the song. ${getLanguageInstruction(language)}`,
+            }
+        });
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error fetching chant lyrics:", error);
+        throw new Error("Failed to retrieve the lyrics for this chant.");
     }
 };
