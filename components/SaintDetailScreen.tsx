@@ -5,6 +5,7 @@ import type { SaintInfo } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { translations } from '../lib/translations';
 import type { Language } from '../App';
+import ShareButton from './ShareButton';
 
 interface SaintDetailScreenProps {
   saintName: string;
@@ -96,6 +97,19 @@ const SaintDetailScreen: React.FC<SaintDetailScreenProps> = ({ saintName, onGoBa
             </div>
           )}
           <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-black/70 via-black/40 to-transparent"></div>
+          
+          <div className="absolute top-4 right-4 z-20">
+              <ShareButton
+                  shareData={{
+                      title: saintInfo.name,
+                      text: `${saintInfo.name}: ${saintInfo.summary}`,
+                      url: window.location.href,
+                  }}
+                  ariaLabel={t.shareSaint(saintInfo.name)}
+                  className="bg-white/20 hover:bg-white/40 text-white"
+              />
+          </div>
+
           <div className="relative z-10 p-6 animate-slide-up mt-auto w-full pb-10">
               <h1 className="text-5xl md:text-7xl font-bold drop-shadow-lg">{saintInfo.name}</h1>
               <p className="text-lg md:text-xl mt-4 max-w-2xl mx-auto drop-shadow-md">

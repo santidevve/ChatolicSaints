@@ -100,6 +100,9 @@ export const translations = {
     gospelOfTheDay: 'Gospel of the Day',
     loadingGospel: "Fetching today's Gospel...",
     errorGospel: "Could not load the Gospel of the day.",
+    shareAction: 'Share',
+    shareSaint: (name: string) => `Share the story of ${name}`,
+    shareGospel: 'Share today\'s Gospel',
   },
   es: {
     saints: 'Santos',
@@ -182,5 +185,8 @@ export const translations = {
     gospelOfTheDay: 'Evangelio del Día',
     loadingGospel: 'Buscando el Evangelio de hoy...',
     errorGospel: 'No se pudo cargar el Evangelio del día.',
+    shareAction: 'Compartir',
+    shareSaint: (name: string) => `Compartir la historia de ${name}`,
+    shareGospel: 'Compartir el Evangelio de hoy',
   }
 };

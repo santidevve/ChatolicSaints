@@ -97,6 +97,32 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
     setIsPaused(false);
   }, []);
 
+  const startSpeechFromVerse = useCallback((startIndex: number) => {
+    if (typeof window.speechSynthesis === 'undefined') {
+        setError("Text-to-speech is not supported in this browser.");
+        return;
+    }
+    
+    handleStopSpeech();
+
+    const versesToSpeak = verses.slice(startIndex);
+    if (versesToSpeak.length === 0) return;
+
+    const textToSpeak = versesToSpeak.map(v => v.text).join(' ');
+    
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.lang = language === 'es' ? 'es-ES' : 'en-US';
+    utterance.onend = () => {
+        setIsSpeaking(false);
+        setIsPaused(false);
+        utteranceRef.current = null;
+    };
+    utteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+    setIsSpeaking(true);
+    setIsPaused(false);
+  }, [verses, language, handleStopSpeech]);
+
   useEffect(() => {
     return () => handleStopSpeech();
   }, [handleStopSpeech]);
@@ -116,20 +142,9 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
             setIsPaused(true);
         }
     } else {
-        const textToSpeak = verses.map(v => v.text).join(' ');
-            
-        const utterance = new SpeechSynthesisUtterance(textToSpeak);
-        utterance.lang = language === 'es' ? 'es-ES' : 'en-US';
-        utterance.onend = () => {
-            setIsSpeaking(false);
-            setIsPaused(false);
-            utteranceRef.current = null;
-        };
-        utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
-        setIsSpeaking(true);
+        startSpeechFromVerse(0);
     }
-  }, [isSpeaking, isPaused, verses, language]);
+  }, [isSpeaking, isPaused, startSpeechFromVerse]);
 
 
   // --- Data Fetching Logic ---
@@ -266,10 +281,13 @@ const BibleReader: React.FC<{ language: Language }> = ({ language }) => {
 
                             return (
                                 <div key={index} className="flex items-start gap-2 py-1">
-                                    <button onClick={() => toggleBookmark(verse)} className="text-stone-400 hover:text-amber-600 transition-colors mt-1" aria-label={isVerseBookmarked ? t.removeBookmark : t.addBookmark}>
+                                    <button onClick={() => toggleBookmark(verse)} className="text-stone-400 hover:text-amber-600 transition-colors mt-1 flex-shrink-0" aria-label={isVerseBookmarked ? t.removeBookmark : t.addBookmark}>
                                         {isVerseBookmarked ? <BookmarkFilledIcon /> : <BookmarkOutlineIcon />}
                                     </button>
-                                    <p>
+                                    <p
+                                        onClick={() => startSpeechFromVerse(index)}
+                                        className="cursor-pointer hover:text-amber-800 transition-colors flex-grow"
+                                    >
                                         <strong className="text-stone-500 w-6 inline-block mr-1">{verse.verse}</strong>
                                         {verse.text}
                                     </p>

@@ -4,6 +4,7 @@ import type { GospelReading } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import { translations } from '../lib/translations';
 import type { Language } from '../App';
+import ShareButton from './ShareButton';
 
 interface GospelOfTheDayProps {
   language: Language;
@@ -52,7 +53,17 @@ const GospelOfTheDay: React.FC<GospelOfTheDayProps> = ({ language }) => {
     <div className="mt-12 animate-fade-in">
       <h3 className="text-2xl font-bold text-center text-stone-700 mb-6">{t.gospelOfTheDay}</h3>
       <div className="p-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-stone-200">
-        <h4 className="text-2xl font-bold text-center text-amber-800 mb-4">{gospel.reference}</h4>
+        <div className="flex justify-between items-center mb-4">
+            <h4 className="text-2xl font-bold text-amber-800">{gospel.reference}</h4>
+            <ShareButton
+                shareData={{
+                    title: `${t.gospelOfTheDay}: ${gospel.reference}`,
+                    text: `Today's Gospel Reading (${gospel.reference}):\n\n${gospel.text}`,
+                    url: window.location.href,
+                }}
+                ariaLabel={t.shareGospel}
+            />
+        </div>
         <div className="prose max-w-none text-stone-700 leading-relaxed whitespace-pre-wrap text-justify">
           {gospel.text.split('\n').map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
