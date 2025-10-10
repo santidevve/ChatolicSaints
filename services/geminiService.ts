@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { SaintInfo, BibleVerse, SaintValidation, EucharisticMiracle, MiracleSource, ChapterVerse, Chant, SaintOfTheDay, GospelReading } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY! });
 
 const saintInfoSchema = {
   type: Type.OBJECT,
