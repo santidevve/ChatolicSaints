@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import type { SaintInfo, BibleVerse, SaintValidation, EucharisticMiracle, MiracleSource, ChapterVerse, Chant } from '../types';
+import type { SaintInfo, BibleVerse, SaintValidation, EucharisticMiracle, MiracleSource, ChapterVerse, Chant, SaintOfTheDay, GospelReading } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
@@ -30,6 +29,28 @@ const saintSuggestionsSchema = {
     type: Type.ARRAY,
     items: { type: Type.STRING },
     description: "A list of up to 5 potential saint names that match the user's partial query."
+};
+
+const saintsOfTheDaySchema = {
+    type: Type.ARRAY,
+    items: {
+        type: Type.OBJECT,
+        properties: {
+            name: { type: Type.STRING, description: 'The full name of the saint, including "St.".' },
+            summary: { type: Type.STRING, description: 'A single, concise sentence summarizing the saint\'s significance or key life event.' }
+        },
+        required: ["name", "summary"]
+    },
+    description: "A list of Catholic saints whose feast day is today. Can be one or more saints. If there are no major saints, return an empty array."
+};
+
+const gospelReadingSchema = {
+    type: Type.OBJECT,
+    properties: {
+        reference: { type: Type.STRING, description: 'The full scripture reference for the Gospel reading (e.g., "John 3:16-21").' },
+        text: { type: Type.STRING, description: 'The full text of the Gospel reading for the day.' }
+    },
+    required: ["reference", "text"]
 };
 
 const bibleSearchSchema = {
@@ -70,6 +91,46 @@ const chantListSchema = {
 
 const getLanguageInstruction = (language: string) => {
     return language === 'es' ? 'All responses must be in Spanish.' : 'All responses must be in English.';
+};
+
+export const getGospelOfTheDay = async (language: string): Promise<GospelReading> => {
+    const today = new Date().toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `What is the Catholic Gospel reading for today, ${today}?`,
+            config: {
+                systemInstruction: `You are a Catholic resource providing the daily Gospel reading according to the General Roman Calendar lectionary. Provide the scripture reference and the full text. Use the New American Bible, Revised Edition (NABRE) for English and the Biblia de Jerusalén Latinoamericana for Spanish. ${getLanguageInstruction(language)}`,
+                responseMimeType: "application/json",
+                responseSchema: gospelReadingSchema,
+            },
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as GospelReading;
+    } catch (error) {
+        console.error("Error fetching Gospel of the day:", error);
+        throw new Error("Could not retrieve the Gospel of the day.");
+    }
+};
+
+export const getSaintsOfTheDay = async (language: string): Promise<SaintOfTheDay[]> => {
+    const today = new Date().toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { month: 'long', day: 'numeric' });
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Who are the Catholic saints of the day for ${today}?`,
+            config: {
+                systemInstruction: `You are a Catholic historian providing information from the General Roman Calendar. Your task is to list the saint(s) celebrated today. Provide the response as a JSON array of objects, each containing the saint's name and a one-sentence summary. If there are multiple saints (e.g., companions), list them. If it's a minor feast day or no major saint is celebrated, you can return an empty array. ${getLanguageInstruction(language)}`,
+                responseMimeType: "application/json",
+                responseSchema: saintsOfTheDaySchema,
+            },
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as SaintOfTheDay[];
+    } catch (error) {
+        console.error("Error fetching saints of the day:", error);
+        throw new Error("Could not retrieve the saints of the day.");
+    }
 };
 
 export const getSaintSuggestions = async (query: string, language: string): Promise<string[]> => {
@@ -337,7 +398,7 @@ export const getChantList = async (language: string): Promise<Chant[]> => {
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: "Extract the list of all chants from the page 'https://neocatechumenaleiter.org/cantoral-resucito/'. Return a JSON array of objects, where each object has 'number' and 'title'.",
+            contents: "Extract the list of all chants from the application at 'https://app.resucito.es/home'. The app contains a comprehensive list of neocatechumenal chants. Return a JSON array of objects, where each object has 'number' and 'title'.",
             config: {
                 systemInstruction: `You are a web data extractor. Your task is to parse the provided URL and return a structured list of songs. The title should be cleaned of any extra numbering. ${getLanguageInstruction(language)}`,
                 responseMimeType: "application/json",
@@ -356,7 +417,7 @@ export const getChantLyrics = async (chantTitle: string, language: string): Prom
     try {
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Provide the lyrics for the chant "${chantTitle}". You can use the songbook at 'https://neocatechumenaleiter.org/cantoral-resucito/' as a primary reference.`,
+            contents: `Provide the lyrics for the chant "${chantTitle}". You can use the songbook at 'https://app.resucito.es/home' as a primary reference.`,
             config: {
                 systemInstruction: `You are a helpful assistant providing song lyrics. Format the lyrics clearly with line breaks. Do not include chords or any other annotations, just the text of the song. ${getLanguageInstruction(language)}`,
             }

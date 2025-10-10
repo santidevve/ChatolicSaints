@@ -1,9 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import useVoiceRecognition from '../hooks/useVoiceRecognition';
 import { translations } from '../lib/translations';
 import type { Language } from '../App';
 import { getSaintSuggestions } from '../services/geminiService';
+import SaintsOfTheDay from './SaintsOfTheDay';
+import GospelOfTheDay from './GospelOfTheDay';
 
 interface SearchScreenProps {
   onSelectSaint: (name: string) => void;
@@ -99,7 +100,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectSaint, language }) 
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center text-center p-4">
       <div className="absolute top-0 left-0 w-full h-full bg-cover bg-center opacity-10" style={{backgroundImage: "url('https://picsum.photos/seed/church/1200/800')"}}></div>
-      <div className="relative z-10 animate-fade-in">
+      <div className="relative z-10 animate-fade-in w-full">
         <h1 className="text-5xl md:text-7xl font-bold text-amber-800 drop-shadow-lg">{t.title}</h1>
         <p className="mt-4 mb-8 text-lg md:text-xl text-stone-700 max-w-2xl mx-auto">
           {t.subtitle}
@@ -152,6 +153,11 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectSaint, language }) 
           )}
 
           {voiceError && <p className="text-red-500 text-sm mt-2">{voiceError}</p>}
+        </div>
+        
+        <div className="w-full max-w-3xl mx-auto">
+          <SaintsOfTheDay onSelectSaint={onSelectSaint} language={language} />
+          <GospelOfTheDay language={language} />
         </div>
 
         <div className="mt-12">

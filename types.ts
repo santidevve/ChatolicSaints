@@ -1,4 +1,3 @@
-
 export interface SaintInfo {
   name: string;
   feastDay: string;
@@ -50,4 +49,14 @@ export interface Chant {
 export interface ChantDetails {
   title: string;
   lyrics: string;
+}
+
+export interface SaintOfTheDay {
+  name: string;
+  summary: string;
+}
+
+export interface GospelReading {
+  reference: string;
+  text: string;
 }

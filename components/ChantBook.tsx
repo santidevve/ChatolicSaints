@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { getChantList, getChantLyrics } from '../services/geminiService';
 import type { Chant, ChantDetails } from '../types';
@@ -84,7 +85,7 @@ const ChantBook: React.FC<{ language: Language }> = ({ language }) => {
             <p className="text-center text-stone-500 text-sm mb-6">
                 {t.chantSourceInfo}
                 <a 
-                    href="https://neocatechumenaleiter.org/cantoral-resucito/"
+                    href="https://app.resucito.es/home"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-amber-700 hover:underline"
